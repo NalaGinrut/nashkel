@@ -208,8 +208,6 @@
     (black! (next2 w))
     (%rotate-left! head (tree-parent x))))
 
-(or (eq? x (rbtree-root rb)) (red? x))
-
 (define (%delete-fixup head x)
   (let lp((x x))
     (cond
