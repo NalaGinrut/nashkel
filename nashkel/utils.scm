@@ -21,7 +21,7 @@
   #:use-module (ice-9 q)
   #:export (list-swap!
             vector-swap!
-            make-iterator
+            make-counter
             nashkel-default-error 
             ->list
             %q-remove-with-key!))
@@ -36,7 +36,7 @@
     (vector-set! vec i (vector-ref vec j))
     (vector-set! vec j x)))
 
-(define (make-iterator first next)
+(define* (make-counter #:key (first 0) (next 1))
   (let ((i first))
     (lambda ()
       (let ((j (next i)))
