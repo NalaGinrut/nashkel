@@ -149,18 +149,8 @@
   (tree-right-set! y x) ; y.right = x 
   (tree-parent-set! x y)) ; x.p = y
 
-(define (rbt-next< tree)
-  (match tree
-    (($ rb-tree ($ tree-node _ _ (left right)) _ _ _)
-     ;;(and (verbose?) (show-something))
-     left)
-    (else (nashkel-default-error rbt-next< "Fatal: shouldn't be here!" (->list tree)))))
-
-(define (rbt-next> tree)
-  (match tree
-    (($ rb-tree ($ tree-node _ _ (left right)) _ _ _)
-     right)
-    (else (nashkel-default-error rbt-next> "Fatal: shouldn't be here!" (->list tree)))))
+(define rbt-next< tree-left)
+(define rbt-next> tree-right)
 
 (define (rbt-make-PRED tree =? >? <? key)
   (match tree
@@ -257,7 +247,7 @@
   (let* ((y (if (or (not (tree-left z)) (not (tree-right z)))
                 z
                 (rb-tree-successor z)))
-         (x (if (tree-left y) (tree-left y) (tree-right y))))
+         (x (or (tree-left y) (tree-right y))))
     (when x
       (tree-parent-set! x (tree-parent y)))
     (cond
@@ -324,8 +314,8 @@
   #t)
 
 (define* (rb-tree-add! head key val #:key (PRED rbt-default-PRED)
-                          (next< rbt-next<) (next> rbt-next>)
-                          (err nashkel-default-error))
+                       (next< rbt-next<) (next> rbt-next>)
+                       (overwrite? #t) (err nashkel-default-error))
   (define rbt (head-node-tree head))
   (define (adder! node)
     (cond
@@ -338,7 +328,7 @@
       (and overwrite? (rb-tree-val-set! node val) '*dumplicated-val*))
      (else
       ;; normal insertion.
-      (%add-node! head node key val PRED overwrite?))))
+      (%add-node! head node key val PRED))))
   (meta-tree-BST-find! rbt key rb-tree? adder! next< next> PRED err)
   (count+1! head)
   #t)
