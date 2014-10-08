@@ -94,12 +94,22 @@
 ;;        /    \           left rotate           /     \
 ;; [1,black]   [7,black]        ==>       [5,black]     [8,black]
 ;;               /    \                    /     \         /   \
-;; *brk*-->[6,black]  [8,black]       [1,black] [6,black] ... ...  
+;; *brk*-->[6,black]  [8,black]       [1,black] [6,black] ... ...
+;;
+;; for the code:
+;;        py                      py 
+;;        |                       |
+;;        y                       x
+;;       / \    left rotate      / \
+;;      ly  x       ==>         y  rx
+;;         / \                 / \
+;;        lx rx               ly  lx
+;; NOTE: left rotate only cut left child, so it's lx was cut. 
 (define-syntax-rule (%rotate-left! head x)
   (match (meta-tree x)
     (($ tree-node _ px (lx rx))
      (match (meta-tree rx)
-       (($ tree-node _ py (ly ry))
+       (($ tree-node _ py (ly _)) ; ry is x
         (tree-right-set! x ly)
         (when (non-leaf? ly)
           (tree-parent-set! ly x))
@@ -122,11 +132,21 @@
 ;;     [3,black]   [7,black]        ==>       [2,black]    [5,black]
 ;;       /    \                                 / \            /  \
 ;; [2,black] [4,black] <-- *brk*              ... ...  [4,black]  [7,black]
+;; 
+;; for the code:
+;;        py                      py
+;;        |                       |
+;;        y                       x
+;;       / \   right rotate      / \
+;;      x  ry     ==>          lx   y
+;;     / \                         / \
+;;    lx rx                       rx  ry
+;; NOTE: right rotate only cut right child, so rx was cut.
 (define-syntax-rule (%rotate-right! head x)
   (match (meta-tree x)
     (($ tree-node _ px (lx rx))
      (match (meta-tree lx)
-       (($ tree-node _ py (ly ry))
+       (($ tree-node _ py (_ ry)) ; ly is x
         (tree-left-set! x ry)
         (when (non-leaf? ry)
           (tree-parent-set! ry x))
