@@ -25,6 +25,8 @@
 ;; Ref: Left-Leaning Red-Black Trees Considered Harmful
 ;; Link: http://read.seas.harvard.edu/~kohler/notes/llrb.html
 
+;; NOTE: This RB tree follows the algorithm from <<Introduction to Algorithm>>.
+
 ;; ====== Red Black Trees ======
 ;; 1. Every node has a value.
 ;; 2. The value of any node is greater than the value of its left child and less than the value of its right child.
@@ -97,34 +99,26 @@
 ;; *brk*-->[6,black]  [8,black]       [1,black] [6,black] ... ...
 ;;
 ;; for the code:
-;;        py                      py 
+;;        px                      px 
 ;;        |                       |
-;;        y                       x
+;;        x                       y
 ;;       / \    left rotate      / \
-;;      ly  x       ==>         y  rx
+;;      lx  y       ==>         x  ry
 ;;         / \                 / \
-;;        lx rx               ly  lx
-;; NOTE: left rotate only cut left child, so it's lx was cut. 
+;;        ly ry               lx  ly
+;; NOTE: left rotate only cut left child, so it's ly was cut. 
 (define-syntax-rule (%rotate-left! head x)
-  (match (meta-tree x)
-    (($ tree-node _ px (lx rx))
-     (match (meta-tree rx)
-       (($ tree-node _ py (ly _)) ; ry is x
-        (tree-right-set! x ly)
-        (when (non-leaf? ly)
-          (tree-parent-set! ly x))
-        (tree-parent-set! rx px)
-        (if (root? x)
-            (tree-root-set! head rx)
-            (if (is-left-child? x)
-                (tree-left-set! px rx)
-                (tree-right-set! px rx)))
-        (tree-left-set! rx x)
-        (tree-parent-set! x rx))
-       (else (nashkel-default-error
-              %rotate-left! "Fatal1: Shouldn't be here!" (->list rx))))
-     (else (nashkel-default-error
-            %rotate-left! "Fatal0: Shouldn't be here!" (->list x))))))
+  (tree-right-set! x (tree-left y)) ; x.right = y.left
+  (when (non-leaf? (tree-left y)) ; if y.left != T.nil
+    (tree-parent-set! (tree-left y) x)) ; y.left.p = x
+  (tree-parent-set! y (tree-parent x)) ; y.p = x.p
+  (if (root? x) ; if x.p == T.nil
+      (tree-root-set! head y) ; T.root = y
+      (if (is-left-child? x) ; elseif x == x.p.left
+          (tree-left-set! (tree-parent x) y) ; x.p.left = y
+          (tree-right-set! (tree-parent x) y))) ; else x.p.right = y
+  (tree-left-set! y x) ; y.left = x
+  (tree-parent-set! x y)) ; x.p = y
 
 ;; right rotate for adding smaller node then try to be balanced
 ;;            [5,red]*                               [3,red]*
@@ -134,34 +128,26 @@
 ;; [2,black] [4,black] <-- *brk*              ... ...  [4,black]  [7,black]
 ;; 
 ;; for the code:
-;;        py                      py
+;;        px                      px
 ;;        |                       |
-;;        y                       x
+;;        x                       y
 ;;       / \   right rotate      / \
-;;      x  ry     ==>          lx   y
+;;      y  rx     ==>          ly   x
 ;;     / \                         / \
-;;    lx rx                       rx  ry
-;; NOTE: right rotate only cut right child, so rx was cut.
+;;    ly ry                       lx  lx
+;; NOTE: right rotate only cut right child, so ry was cut.
 (define-syntax-rule (%rotate-right! head x)
-  (match (meta-tree x)
-    (($ tree-node _ px (lx rx))
-     (match (meta-tree lx)
-       (($ tree-node _ py (_ ry)) ; ly is x
-        (tree-left-set! x ry)
-        (when (non-leaf? ry)
-          (tree-parent-set! ry x))
-        (tree-parent-set! lx px)
-        (if (root? x)
-            (tree-root-set! head lx) ; fix root node
-            (if (is-right-child? x)
-                (tree-right-set! px lx)
-                (tree-left-set! px lx)))
-        (tree-right-set! lx x)
-        (tree-parent-set! x lx))
-       (else nashkel-default-error
-             %rotate-right! "Fatal1: Shouldn't be here!" (->list lx)))
-     (else (nashkel-default-error
-            %rotate-right! "Fatal0: Shouldn't be here!" (->list x))))))
+  (tree-left-set! x (tree-right y)) ; x.left = y.right
+  (when (non-leaf? (tree-right y)) ; if y.right != T.nil
+    (tree-parent-set! (tree-right y) x)) ; y.right.p = x
+  (tree-parent-set! y (tree-parent x)) ; y.p = x.p
+  (if (root? x) ; if x.p == T.nil
+      (tree-root-set! head y) ; T.root = y 
+      (if (is-right-child? x) ; elseif x == x.p.right
+          (tree-right-set! (tree-parent x) y) ; x.p.right = y 
+          (tree-left-set! (tree-parent x) y))) ; else x.p.left = y
+  (tree-right-set! y x) ; y.right = x 
+  (tree-parent-set! x y)) ; x.p = y
 
 (define (rbt-next< tree)
   (match tree
