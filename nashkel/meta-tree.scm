@@ -32,7 +32,7 @@
             tree-left-set! tree-left
             tree-right-set! tree-right
             tree-parent-set! tree-parent
-            is-left-left-grand-child?
+            is-left-grand-child?
             tree-grand-parent
             is-left-child?
             is-right-child?
@@ -136,7 +136,7 @@
 ;; ------------------------------------------------------------------------
 
 ;; tree node helper functions
-(define-syntax-rule (is-left-left-grand-child? n)
+(define-syntax-rule (is-left-grand-child? n)
   (eq? (tree-parent n) 
        (tree-left (tree-parent (tree-parent n)))))
 

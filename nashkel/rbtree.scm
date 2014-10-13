@@ -152,13 +152,14 @@
 (define rbt-next< tree-left)
 (define rbt-next> tree-right)
 
-(define (rbt-make-PRED tree =? >? <? key)
+;; NOTE: PRED follow the convention "is new key larger/less than current key?"
+(define (rbt-make-PRED tree =? >? <? new-key)
   (match tree
-    (($ rb-tree _ key0 _ _)
+    (($ rb-tree _ key _ _)
      (cond
-      ((=? key0 key) 0)
-      ((>? key0 key) 1)
-      ((<? key0 key) -1)
+      ((=? new-key key) 0)
+      ((>? new-key key) 1) ; new key > current key
+      ((<? new-key key) -1) ; new key < current key
       (nashkel-default-error rbt-make-PRED "Fatal0: shouldn't be here!" (->list tree))))
     (else nashkel-default-error rbt-make-PRED "Fatal1: shouldn't be here!" (->list tree))))
 
@@ -271,47 +272,59 @@
   (count-1! head)
   #t)
 
+;; NOTE: getter will be tree-left or tree-right
+;; NOTE: This is a high-order-function abstracted from RB-INSERT-FIXUP
+;;       in <<Introduction of Algorithm>>.
 (define (%insert-fixup-rec! head new fetch rotate1! rotate2!)
-  (define x (fetch (tree-grand-parent new)))
+  (define x (fetch (tree-grand-parent new))) ; x == n.p.p.getter
+  (define n new) ; set a tmp var for the later side-effect handling.
   (cond
-   ((and x (red? x))
-    (black! (tree-parent new))
-    (black! x)
-    (red! (tree-grand-parent new))
-    (%insert-fixup! head (tree-grand-parent new)))
+   ((and x (red? x)) ; if x.color == RED then
+    (black! (tree-parent n)) ; n.p.color = BLACK
+    (black! x) ; x.color = BLACK
+    (red! (tree-grand-parent n)) ; n.p.p.color = RED
+    (%insert-fixup! head (tree-grand-parent n))) ; LOOP(n.p.p)
    (else
-    (when (eq? new (fetch (tree-parent new)))
-      (rotate1! (tree-root head) (tree-parent new)))
-    (black! (tree-grand-parent new))
-    (red! (tree-parent (tree-grand-parent new)))
-    (rotate2! (tree-root head) (tree-parent (tree-grand-parent new)))
-    (%insert-fixup! head (tree-parent new)))))
+    (when (eq? new (fetch (tree-parent n))) ; else if n == n.p.getter then
+      (set! n (tree-parent n)) ; n = n.p
+      (rotate1! (tree-root head) (tree-parent n))) ; LEFT-ROTATE(T, n.p)
+    (black! (tree-parent n)) ; n.p.color = BLACK
+    (red! (tree-grand-parent n)) ; n.p.p.color = RED
+    ;; RIGHT-ROTATE(T, n.p.p)
+    (rotate2! (tree-root head) (tree-grand-parent n))
+    (%insert-fixup! head n)))) ; LOOP(n)
 
-(define (%insert-fixup! head tree new)
+(define (%insert-fixup! head new)
   (cond
-   ((and (non-root? new) (red? (tree-parent new)p))
+   ((and (non-root? new) (red? (tree-parent new)))
     (cond
-     ((is-left-left-grand-child? new)
+     ((is-left-grand-child? new) ; new node is left grand child of certain node
       (%insert-fixup-rec! head new tree-right %rotate-left! %rotate-right!))
-     (else 
+     (else ; new node is right grand child of certain node
       (%insert-fixup-rec! head new tree-left %rotate-right! %rotate-left!))))
    (else #f)) ; what's the proper return value?
   ;; fix root color
   (black! (tree-root head)))
 
 ;; NOTE: node is the proper entry which was founded in meta-tree-BST-find
-(define (%add-node! head node key val PRED)
+(define (%add-node! head key val PRED)
   (define new (new-rb-tree-node key val))
   ;; NOTE: new node is red in default.
-  (match (PRED node key)
-    ((? positive?) (tree-left-set! node new))
-    ((? negative?) (tree-right-set! node new))
-    (else
-     ;; overwrite shouldn't be here!
-     (nashkel-default-error 
-      %add-node! "Fatal: Shouldn't be here!" (->list node) key)))
-  (%insert-fixup! head node new)
-  #t)
+  (define (try-to-insert! nn)
+    (define-syntax-rule (do-insert! getter setter t n)
+      (if (leaf? (getter t))
+          (setter tt n)
+          (try-to-insert! (getter tt))))
+    (let ((r (PRED nn key)))
+      (cond
+       ((> r 0) (do-insert! tree-right tree-right-set! nn new)) ; larger, right shift
+       ((< r 0) (do-insert! tree-left tree-left-set! nn new)) ; lesser, left shift
+       (else
+        ;; overwrite shouldn't be here!
+        (nashkel-default-error %add-node! "Fatal: Shouldn't be here!" (->list nn) key)))))
+
+  (try-to-insert! (tree-root head))
+  (%insert-fixup! head new))
 
 (define* (rb-tree-add! head key val #:key (PRED rbt-default-PRED)
                        (next< rbt-next<) (next> rbt-next>)
@@ -328,7 +341,7 @@
       (and overwrite? (rb-tree-val-set! node val) '*dumplicated-val*))
      (else
       ;; normal insertion.
-      (%add-node! head node key val PRED))))
+      (%add-node! head key val PRED))))
   (meta-tree-BST-find! rbt key rb-tree? adder! next< next> PRED err)
   (count+1! head)
   #t)
