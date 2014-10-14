@@ -79,7 +79,9 @@
 ;; * tree-meta should be the first direct parent of any specific tree node.
 
 (define-record-type tree-node
-  (fields parent children))
+  (fields
+   (mutable parent)
+   (mutable children)))
 
 (define-syntax-rule (tree-meta tree) (record-type-parent (record-rtd tree))
 
@@ -156,7 +158,10 @@
 ;; ---------------------------------------------
 
 (define-record-type head-node
-  (fields type count tree))
+  (fields
+   type
+   (mutable count)
+   (mutable tree)))
 
 ;; TODO: do we need a leaf-node type? is it worthy?
 (define-syntax-rule (leaf? node) (not node))

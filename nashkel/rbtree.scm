@@ -50,9 +50,8 @@
             rb-tree-maximum rb-tree-ceiling
             rb-tree-select))
 
-(define-record-type rb-tree
-  (parent tree-node)
-  (fields key val color))
+(define-record-type rb-tree (parent tree-node)
+  (fields key val (mutable color)))
 
 ;; NOTE: Which type could be used for color?
 ;;       Symbol stored here is a address actually, which means it costs a 32/64
