@@ -141,12 +141,12 @@
        (tree-left (tree-parent (tree-parent n)))))
 
 (define-syntax-rule (is-left-child? c)
-  (let ((pp (tree-node-parent (meta-tree c))))
-    (eq? c (tree-node-left (meta-tree pp)))))
+  (let ((p (tree-parent c)))
+    (eq? c (tree-left p))))
 
-(define-syntax-rule (is-right-child? c pp)
-  (let ((pp (tree-node-parent (meta-tree c))))
-    (eq? c (tree-node-right (meta-tree pp)))))
+(define-syntax-rule (is-right-child? c)
+  (let ((p (tree-parent c)))
+    (eq? c (tree-right p))))
 
 ;; TODO: any check here?
 (define-syntax-rule (tree-grand-parent n)
@@ -394,12 +394,13 @@
 ;;           / \            / \                            / \  
 ;;     ==>[ Z ] ...       ... ...                      [ X ] ...
 (define (mdta-tree-BST-successor tree valid? err)
-  (define-syntax-rule (false-to-find x)
-    (not x))
+  ;; NOTE: Although root is defined as #f here, please don't rely on
+  ;;       it! Use 'false-to-find?' to return #f if no sucessor.
+  (define-syntax-rule (false-to-find? x) (or x))
   (when (not (valid? tree))
     (err meta-tree-BST-successor "Invalid tree!" (->list tree)))
   (cond
-   ((non-leaf? (tree-node-right (meta-tree tree))) ; (1)
+   ((non-leaf? (tree-node-right (meta-tree tree))) ; Case (1)
     ;; get min in right subtree
     (meta-tree-BST-floor (tree-node-right (meta-tree tree)) valid? err))
    (else
@@ -414,10 +415,8 @@
           ;; NOTE: What about p is root node?!
           ;;       There's only one situation p can be root, that is tree is
           ;;       the largest node. Usually, we return #f for this. 
-          ;; NOTE: Although root is defined as #f here, please don't rely on
-          ;;       it! Use 'false-to-find' to return #f if no sucessor. 
-          ;; (2)
-          (or (false-to-find p) p))))))))
+          ;; Case (2):
+          (false-to-find? p))))))))
 
 ;; Predecessor is the largest item in t that is strictly smaller than X.
 ;;

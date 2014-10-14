@@ -109,10 +109,10 @@
 ;; NOTE: left rotate only cut left child, so it's ly was cut. 
 (define-syntax-rule (%rotate-left! head x)
   (tree-right-set! x (tree-left y)) ; x.right = y.left
-  (when (non-leaf? (tree-left y)) ; if y.left != T.nil
+  (when (non-leaf? (tree-left y)) ; if y.left is not leaf
     (tree-parent-set! (tree-left y) x)) ; y.left.p = x
   (tree-parent-set! y (tree-parent x)) ; y.p = x.p
-  (if (root? x) ; if x.p == T.nil
+  (if (root? x) ; if x is root
       (tree-root-set! head y) ; T.root = y
       (if (is-left-child? x) ; elseif x == x.p.left
           (tree-left-set! (tree-parent x) y) ; x.p.left = y
@@ -138,10 +138,10 @@
 ;; NOTE: right rotate only cut right child, so ry was cut.
 (define-syntax-rule (%rotate-right! head x)
   (tree-left-set! x (tree-right y)) ; x.left = y.right
-  (when (non-leaf? (tree-right y)) ; if y.right != T.nil
+  (when (non-leaf? (tree-right y)) ; if y.right is not leaf
     (tree-parent-set! (tree-right y) x)) ; y.right.p = x
   (tree-parent-set! y (tree-parent x)) ; y.p = x.p
-  (if (root? x) ; if x.p == T.nil
+  (if (root? x) ; if x is root
       (tree-root-set! head y) ; T.root = y 
       (if (is-right-child? x) ; elseif x == x.p.right
           (tree-right-set! (tree-parent x) y) ; x.p.right = y 
@@ -218,33 +218,46 @@
         (%delete-fixup-rec tree x tree-right tree-left)))
       (lp (tree-root head))))))
 
-;; Pseudo code:
-;; REF: http://staff.ustc.edu.cn/~csli/graduate/algorithms/book6/chap14.htm
-;;
-;; RB-DELETE (T, z)
-;; if left[z] = nil[T] or right[z] = nil[T]
-;;    then y <- z
-;;    else y <- TREE-SUCCESSOR(z)
-;; endif
-;; if left[y] != nil[T] then      
-;;    then x <- left[y]
-;;    else x <- right[y]
-;; endif
-;; p[x] <- p[y]
-;; if p[y] = nil[T]
-;;    then root[T] <- x
-;;    else if y = left[p[y]]
-;;    then left[p[y]] <- x
-;;    else right[p[y]] <- x
-;; if y != z
-;;    then key[z] <- key[y]
-;;         if y has other fields, copy them, too.
-;; end if
-;; if color[y] = BLACK
-;;    then RB-DELETE-FIXUP (T,x)
-;; endif
-;; return y         
+(define (%transplant! head u v)
+  (cond
+   ((root? u) ; if u is root
+    (tree-root-set! head v)) ; T.root = v
+   ((is-left-child? u) ; else if u == u.p.left
+    (tree-left-set! (tree-parent u) v)) ; u.p.left = v
+   (else (tree-right-set! (tree-parent u) v))) ; u.p.right = v 
+  (tree-parent-set! v (tree-parent u))) ; v.p = u.p
+
 (define (%remove-node! head z)
+  (define (tree-minimum t)
+    (meta-tree-BST-floor t rb-tree? nashkel-default-error))
+  (define x)
+  (define y z) ; y = z
+  (define y-original-color (rb-tree-color z)) ; y-original-color = y.color
+  (cond
+   ((leaf? (tree-left z)) ; if z.left is leaf
+    (set! x (tree-right z)) ; x = z.right
+    (%transplant! head z (tree-right z))) ; RB-TRANSPLANT (T, z, z.right)
+   ((leaf? (tree-right z)) ; else if z.right is leaf
+    (set! x *tree-left z) ; x = z.left
+    (%transplant! head z (tree-left z))) ; RB-TRANSPLANT (T, z, z.left)
+   (else
+    (set! y (tree-minimum (tree-right z))) ; TREE-MINIMUM (z.right)
+    (set! y-original-color (rb-tree-color y)) ; y-original-color = y.color
+    (set! x (tree-right y)) ; x = y.right
+    (cond
+     ((eq? (tree-parent y) z) ; if y.p == z
+      (tree-parent-set! x y)) ; x.p = y
+     (else
+      (%transplant! head y (tree-right y)) ; RB-TRANSPLANT (T, y, y.right)
+      (tree-right-set! y (tree-right z)) ; y.right = z.right
+      (tree-parent-set! (tree-right y) y))) ; y.right.p = y
+    (%transplant! head z y) ; RB-TRANSPLANT (T, z, y)
+    (tree-left-set! y (tree-left z)) ; y.left = z.left
+    (tree-parent-set! (tree-left y) y) ; y.left.p = y
+    (rb-tree-color-set! y (rb-tree-color z)))) ; y.color = z.color
+  (and (black? y-original-color) ; if y-original-color == BLACK
+       (%delete-fixup head x))) ; RB-DELETE-FIXUP (T, x)
+     
   (let* ((y (if (or (not (tree-left z)) (not (tree-right z)))
                 z
                 (rb-tree-successor z)))
