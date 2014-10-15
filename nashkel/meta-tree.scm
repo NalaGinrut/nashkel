@@ -48,6 +48,8 @@
             head-node-type head-node-type-set!
             head-node-count head-node-count-set!
             head-node-tree head-node-tree-set!
+            root? non-root?
+            tree-empty?
             tree-root
             tree-root-set!            
             make-tree
@@ -55,6 +57,8 @@
             tree-remove-node!
             subtree-size
             no-children?
+            count+1!
+            count-1!
             ;; BST generic operations
             meta-tree-BST-select
             meta-tree-BST-rank
@@ -84,7 +88,7 @@
    (mutable parent)
    (mutable children)))
 
-(define-syntax-rule (tree-meta tree) (record-type-parent (record-rtd tree)))
+(define-syntax-rule (tree-meta tree) (record-parent-ref tree 0))
 
 ;; only for binary tree
 ;; --------------------------------------------
@@ -93,49 +97,26 @@
 
 ;; ---------------tree-node-* functions----------------------------------
 ;; These functions are used by tree-node type.
-(define-syntax-rule (children-setter! index node new)
-  (match node
-    (($ tree-node _ _ (? valid-children? children))
-     (list-set! children index new))
-    (($ tree-node _ _ ())
-     (error children-setter! "Fatal0: invalid children!" (->list node)))
-    (else (error children-setter! "Fatal1: invalid node!" (->list node)))))
-
-(define-syntax-rule (tree-node-left-set! node new) 
-  (children-setter! 0 node new))
-(define-syntax-rule (tree-node-right-set! node new) 
-  (children-setter! 1 node new))
-
-(define-syntax-rule (tree-node-left node)
-  (match node
-    (($ tree-node _ (left _)) left)
-    (else (error 'tree-node-left "Fatal0: Shouldn't be here!" node))))
-
-(define-syntax-rule (tree-node-right node)
-  (match node
-    (($ tree-node _ (right _)) right)
-    (else (error 'tree-node-right "Fatal0: Shouldn't be here!" node))))
+(define (children-setter! index node new)
+  (let* ((children (tree-node-children node))
+         (cl (if (zero? index)
+                 (list new (cadr children))
+                 (list (car children) new))))
+    (tree-node-children-set! node cl)))
+    
+(define-syntax-rule (tree-node-left-set! node new) (children-setter! 0 node new))
+(define-syntax-rule (tree-node-right-set! node new) (children-setter! 1 node new))
 ;; -----------------------------------------------------------------------
 
 ;; ---------------tree-* functions----------------------------------------
 ;; These functions are used by specific tree implementation, e.g. rbt
-(define-syntax-rule (tree-left-set! t new) 
-  (tree-left-set! (tree-meta t) new))
+(define (tree-left-set! t new) (tree-node-left-set! t new))
+(define (tree-right-set! t new) (tree-node-right-set! t new))
+(define (tree-parent-set! t new) (tree-node-parent-set! t new))
 
-(define-syntax-rule (tree-right-set! t new) 
-  (tree-right-set! (tree-meta t) new))
-
-(define-syntax-rule (tree-parent-set! t new)
-  (tree-parent-set! (tree-meta t) new))
-
-(define-syntax-rule (tree-left t)
-  (tree-node-left (tree-meta t)))
-
-(define-syntax-rule (tree-right t)
-  (tree-node-right (tree-meta t)))
-
-(define-syntax-rule (tree-parent t)
-  (tree-node-parent (tree-meta t)))
+(define (tree-left t) (car (tree-node-children t)))
+(define (tree-right t) (cadr (tree-node-children t)))
+(define (tree-parent t) (tree-node-parent t))
 ;; ------------------------------------------------------------------------
 
 ;; tree node helper functions
@@ -169,10 +150,14 @@
 (define-syntax-rule (non-leaf? node) node)
 
 ;; root pred
-(define-syntax-rule (root? node) (tree-node-parent node))
+(define-syntax-rule (root? node) (not (tree-node-parent node)))
 (define-syntax-rule (non-root? node) (not (root? node)))
 (define tree-root head-node-tree)
 (define tree-root-set! head-node-tree-set!)
+
+(define (tree-empty? head)
+  (and (zero? (head-node-count head))
+       (root? (head-node-tree head))))
 
 (define-syntax-rule (make-tree tree-maker type . args)
   (let* ((tree (apply tree-maker args))
@@ -180,10 +165,10 @@
     head))
 
 (define-syntax-rule (count+1! head)
-  (head-node-count-set! head (1+ (head-node-count-set! head))))
+  (head-node-count-set! head (1+ (head-node-count head))))
 
 (define-syntax-rule (count-1! head)
-  (head-node-count-set! head (1- (head-node-count-set! head))))
+  (head-node-count-set! head (1- (head-node-count head))))
 
 (define-syntax-rule (tree-size head) (head-node-count head))
 
@@ -310,7 +295,7 @@
        (let ((children (tree-node-children (tree-meta node))))
          (shift k (list k node))
          (for-each (cut lp <>) children)))))))
- 
+
 ;; Generic tree walker
 ;; ---------------------------------------------------------------
 ;; chew/spit
@@ -495,26 +480,26 @@
     (operate tree))
    (else #f))) ; can't find it
 
-(define (meta-tree-BST-add! tree key val valid? adder! PRED overwrite! err)
+(define (meta-tree-BST-add! tree key valid? adder! PRED overwrite! err)
   (when (not (valid? tree))
     (err meta-tree-BST-add! "Invalid tree!" tree))
-  (match (tree-meta tree)
-    (($ tree-node _ p (left right))
-     (match (PRED tree key)
-       ((? zero?) 
-        ;; find it, if overwritable, it, or return #f
-        (and overwrite! (overwrite! tree val)))
-       ((? positive?)
-        (if (non-leaf? right)
-            ;; has right child, call this method on right child
-            (meta-tree-BST-add! right key val valid? adder! PRED overwrite! err)
-            ;; right is leaf, add to right side
-            (adder! tree key val PRED)))
-       ((? negative?)
-        (if (non-leaf? left)
-            ;; has left child, call this method on left child
-            (meta-tree-BST-add! left key val valid? adder! PRED overwrite! err)
-            ;; left is leaf, add to right side
-            (adder! tree key val PRED)))
-       (else (err meta-tree-BST-find "Fatal0: Shouldn't be here!" (->list tree)))))
-    (else (err meta-tree-BST-add! "Fatal1: Shouldn't be here!" (->list tree)))))
+  (let ((p (tree-parent tree))
+        (left (tree-left tree))
+        (right (tree-right tree)))
+    (match (PRED tree key)
+      ((? zero?) 
+       ;; find it, if overwritable, it, or return #f
+       (and overwrite! (overwrite! tree) '*overwrited*))
+      ((? positive?) ; new key greater than current key, go next>
+       (if (non-leaf? right)
+           ;; has right child, continue to go right
+           (meta-tree-BST-add! right key valid? adder! PRED overwrite! err)
+           ;; right is leaf, add to right side
+           (adder! tree)))
+      ((? negative?) ; new key lesser than current key, go left 
+       (if(non-leaf? left)
+          ;; has left child, continue to go left
+          (meta-tree-BST-add! left key valid? adder! PRED overwrite! err)
+          ;; left is leaf, add to right side
+          (adder! tree)))
+      (else (err meta-tree-BST-add! "Fatal0: Shouldn't be here!" (->list tree))))))
