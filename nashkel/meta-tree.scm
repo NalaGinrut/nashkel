@@ -19,13 +19,14 @@
 ;; Other trees are based on this module.
 
 (define-module (nashkel meta-tree)
-  #:use-modules (nashkel stack)
-  #:use-modules (nashkel queue)
-  #:use-modules ((rnrs) #:select (define-record-type))
-  #:use-modules (ice-9 control)
-  #:use-modules (ice-9 match)
-  #:use-modules (srfi srfi-1)
-  #:use-modules (srfi srfi-26)
+  #:use-module (nashkel utils)
+  #:use-module (nashkel stack)
+  #:use-module (nashkel queue)
+  #:use-module ((rnrs) #:select (define-record-type record-rtd record-type-parent))
+  #:use-module (ice-9 control)
+  #:use-module (ice-9 match)
+  #:use-module (srfi srfi-1)
+  #:use-module (srfi srfi-26)
   #:export (tree-node
             tree-node-left tree-node-left-set!
             tree-node-right tree-node-right-set!
@@ -83,7 +84,7 @@
    (mutable parent)
    (mutable children)))
 
-(define-syntax-rule (tree-meta tree) (record-type-parent (record-rtd tree))
+(define-syntax-rule (tree-meta tree) (record-type-parent (record-rtd tree)))
 
 ;; only for binary tree
 ;; --------------------------------------------
@@ -108,33 +109,33 @@
 (define-syntax-rule (tree-node-left node)
   (match node
     (($ tree-node _ (left _)) left)
-    (else (error tree-node-left "Fatal0: Shouldn't be here!" node))))
+    (else (error 'tree-node-left "Fatal0: Shouldn't be here!" node))))
 
 (define-syntax-rule (tree-node-right node)
   (match node
     (($ tree-node _ (right _)) right)
-    (else (error tree-node-right "Fatal0: Shouldn't be here!" node))))
+    (else (error 'tree-node-right "Fatal0: Shouldn't be here!" node))))
 ;; -----------------------------------------------------------------------
 
 ;; ---------------tree-* functions----------------------------------------
 ;; These functions are used by specific tree implementation, e.g. rbt
 (define-syntax-rule (tree-left-set! t new) 
-  (tree-left-set! (meta-tree t) new))
+  (tree-left-set! (tree-meta t) new))
 
 (define-syntax-rule (tree-right-set! t new) 
-  (tree-right-set! (meta-tree t) new))
+  (tree-right-set! (tree-meta t) new))
 
 (define-syntax-rule (tree-parent-set! t new)
-  (tree-parent-set! (meta-tree t) new))
+  (tree-parent-set! (tree-meta t) new))
 
 (define-syntax-rule (tree-left t)
-  (tree-node-left (meta-tree t)))
+  (tree-node-left (tree-meta t)))
 
 (define-syntax-rule (tree-right t)
-  (tree-node-right (meta-tree t)))
+  (tree-node-right (tree-meta t)))
 
 (define-syntax-rule (tree-parent t)
-  (tree-node-parent (meta-tree t)))
+  (tree-node-parent (tree-meta t)))
 ;; ------------------------------------------------------------------------
 
 ;; tree node helper functions
@@ -183,18 +184,20 @@
 
 (define-syntax-rule (count-1! head)
   (head-node-count-set! head (1- (head-node-count-set! head))))
-  
+
 (define-syntax-rule (tree-size head) (head-node-count head))
-  
+
 ;; specified tree adder implemention should use functions below:
 ;; ------------------------------------------------------------
 (define-syntax-rule (tree-add-node! head adder! node)
-  (adder! (head-node-tree head node))
-  (count+1! head))
+  (begin
+    (adder! (head-node-tree head node))
+    (count+1! head)))
 
 (define-syntax-rule (tree-remove-node! head remover! node)
-  (remover! (head-node-tree head) node)
-  (count-1! head))
+  (begin
+    (remover! (head-node-tree head) node)
+    (count-1! head)))
 ;; ------------------------------------------------------------
 
 ;; -------------------traverse stuffs--------------------------
@@ -239,12 +242,12 @@
      ((non-leaf? t)
       ;; push all left children as possible
       (stack-push! stk t)
-      (lp (tree-node-left (tree-meta t)))) ; left
+      (lp (tree-left t))) ; left
      ((and (leaf? t) (not (stack-empty? stk))) 
       ;; when current path is end, pop one then loop on its right child
       (let ((x (stack-pop! stk)))
         (operate x) ; center
-        (lp (tree-node-right (tree-meta t))))) ; right
+        (lp (tree-right t)))) ; right
      ((and (leaf? t) (stack-empty? stk)) #t) ; end
      (else (err in-order-traverse "Fatal: Shouldn't be here!" (->list t))))))
 
@@ -256,12 +259,12 @@
       ((non-leaf? t)
        ;; push all left children as possible
        (stack-push! stk t)
-       (lp (tree-node-left (tree-meta t)))) ; left
+       (lp (tree-left t))) ; left
       ((and (leaf? t) (not (stack-empty? stk))) 
        ;; when current path is end, pop one then loop on its right child
        (let ((x (stack-pop! stk)))
          (shift k (list k x)) ; center
-         (lp (tree-node-right (tree-meta t))))) ; right
+         (lp (tree-right t)))) ; right
       ((and (leaf? t) (stack-empty? stk)) #t) ; end
       (else (err in-order-traverse "Fatal: Shouldn't be here!" (->list t)))))))
 
@@ -294,7 +297,7 @@
    ((not (leaf? tree))
     (let lp((children (tree-node-children (tree-meta tree))))
       (operate tree)
-      (for-each (cut bfs-every-next operate <>) children)))))
+      (for-each (cut bfs-for-each operate valid? <> err) children)))))
 
 ;; bfs generic stuff
 (define (bfs-for-each/step valid? tree err)
@@ -302,7 +305,7 @@
    (let lp((node tree))
      (cond
       ((not (valid? node))
-       (err bfs-for-each-next "Invalid tree!" node))
+       (err bfs-for-each/step "Invalid tree!" node))
       ((not (leaf? node))
        (let ((children (tree-node-children (tree-meta node))))
          (shift k (list k node))
@@ -341,10 +344,11 @@
 (define (subtree-size tree valid? err)
   (let ((next (chew (bfs-for-each/step tree valid? err))))
     (let lp((n (spit next)) (cnt 0))
-      ((valid? n)
-       (lp (spit next) (1+ cnt)))
-      ((eq? n '*end-continuation*) cnt)
-      (else (err subtree-size "Invalid node!" n)))))
+      (cond
+       ((valid? n)
+        (lp (spit next) (1+ cnt)))
+       ((eq? n '*end-continuation*) cnt)
+       (else (err subtree-size "Invalid node!" n))))))
 
 (define-syntax-rule (no-children? tree)
   (match (meta-tree tree)
@@ -352,14 +356,14 @@
      (and (leaf? left) (leaf? right)))))
 
 ;; NOTE: return a subtree containing rank n.
-(define (meta-tree-BST-select tree n err)
+(define* (meta-tree-BST-select tree n err #:key (PRED identity))
   (if (leaf? tree)
       #f ; no result
       (let lp((t tree) (n n))
-        (match (meta-tree t)
+        (match (tree-meta t)
           ((? leaf? tree) #f) ; no result
           (($ tree-node _ _ (left right))
-           (let ((i (subtree-size left)))
+           (let ((i (subtree-size left PRED err)))
              (cond
               ((> i n) (lp left n))
               ((< i n) (lp right (- i n 1)))
@@ -405,17 +409,17 @@
   (when (not (valid? tree))
     (err meta-tree-BST-successor "Invalid tree!" (->list tree)))
   (cond
-   ((non-leaf? (tree-node-right (meta-tree tree))) ; Case (1)
+   ((non-leaf? (tree-node-right (tree-meta tree))) ; Case (1)
     ;; get min in right subtree
-    (meta-tree-BST-floor (tree-node-right (meta-tree tree)) valid? err))
+    (meta-tree-BST-floor (tree-node-right (tree-meta tree)) valid? err))
    (else
-    (let ((parent (tree-node-parent (meta-tree tree))))
+    (let ((parent (tree-node-parent (tree-meta tree))))
       (let lp((t tree) (p parent))
         (cond
          ((and (valid? p) ; not root and valid
                (is-left-child? t)) ; t is a left child
           ;; trace the upper level
-          (lp p (tree-node-parent (meta-tree p))))
+          (lp p (tree-node-parent (tree-meta p))))
          (else
           ;; NOTE: What about p is root node?!
           ;;       There's only one situation p can be root, that is tree is
@@ -437,17 +441,17 @@
   (when (not (valid? tree))
     (err meta-tree-BST-predecessor "Invalid tree!" (->list tree)))
   (cond
-   ((non-leaf? (tree-node-left (meta-tree tree)))
+   ((non-leaf? (tree-node-left (tree-meta tree)))
     ;; get max in left subtree
-    (meta-tree-BST-ceiling (tree-node-left (meta-tree tree)) valid? err))
+    (meta-tree-BST-ceiling (tree-node-left (tree-meta tree)) valid? err))
    (else
-    (let ((parent (tree-node-parent (meta-tree tree))))
+    (let ((parent (tree-node-parent (tree-meta tree))))
       (let lp((t tree) (p parent))
         (cond
          ((and (valid? p) ; not root and valid
                (is-right-child? t)) ; t is a right child
           ;; trace the upper level
-          (lp p (tree-node-parent (meta-tree p))))
+          (lp p (tree-node-parent (tree-meta p))))
          (else (or (false-to-find p) p))))))))
 
 ;; floor is the same with min
@@ -473,9 +477,9 @@
     (else (err meta-tree-BST-ceiling "Fatal: Shouldn't be here!" (->list tree)))))
 
 (define (meta-tree-BST-find tree key valid? operate next< next> PRED err)
-  (define end
+  (define next
     (cond
-     ((not (valid? tree)) (err meta-tree-find-node "Invalid tree!" tree))
+     ((not (valid? tree)) (err meta-tree-BST-find "Invalid tree!" tree))
      ;; encounter leaf node here, means "can't find it any more".
      ((leaf? tree) #f)
      (else
@@ -483,37 +487,34 @@
         ((? zero?) #t) ; find it
         ((? positive?) (next> tree))
         ((? negative?) (next< tree))
-        (else (err meta-tree-find-node "Shouldn't be here!" tree))))))
+        (else (err meta-tree-BST-find "Shouldn't be here!" tree))))))
   (cond
    ((valid? next) ; haven't found, checkout the next
-    (meta-tree-find-node end operate next< next> PRED err))
-   ((eq? end #t) ; found it, do the specified operation
+    (meta-tree-BST-find next key valid? operate next< next> PRED err))
+   ((eq? next #t) ; found it, do the specified operation
     (operate tree))
    (else #f))) ; can't find it
 
-(define (meta-tree-BST-add! tree key val valid? adder! PRED 
-                             overwrite! overwrite? err)
+(define (meta-tree-BST-add! tree key val valid? adder! PRED overwrite! err)
   (when (not (valid? tree))
-    (err meta-tree-add-node! "Invalid tree!" tree))
+    (err meta-tree-BST-add! "Invalid tree!" tree))
   (match (tree-meta tree)
     (($ tree-node _ p (left right))
      (match (PRED tree key)
        ((? zero?) 
-        ;; find it, if overwritable,  it, or return #f
-        (and overwrite? (overwrite! tree val)))
+        ;; find it, if overwritable, it, or return #f
+        (and overwrite! (overwrite! tree val)))
        ((? positive?)
         (if (non-leaf? right)
             ;; has right child, call this method on right child
-            (meta-tree-add-node! right key val valid? adder! PRED
-                                 overwrite! overwrite? err)
+            (meta-tree-BST-add! right key val valid? adder! PRED overwrite! err)
             ;; right is leaf, add to right side
             (adder! tree key val PRED)))
        ((? negative?)
         (if (non-leaf? left)
             ;; has left child, call this method on left child
-            (meta-tree-add-node! left key val valid? adder! PRED
-                                 overwrite! overwrite? err)
+            (meta-tree-BST-add! left key val valid? adder! PRED overwrite! err)
             ;; left is leaf, add to right side
             (adder! tree key val PRED)))
-       (else (err meta-tree-find-node "Fatal0: Shouldn't be here!" (->list tree)))))
-    (else (err meta-tree-add-node! "Fatal1: Shouldn't be here!" (->list tree)))))
+       (else (err meta-tree-BST-find "Fatal0: Shouldn't be here!" (->list tree)))))
+    (else (err meta-tree-BST-add! "Fatal1: Shouldn't be here!" (->list tree)))))
