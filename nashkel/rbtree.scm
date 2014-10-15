@@ -35,11 +35,11 @@
 ;; 5. Every path from the root to a leaf contains the same number of black nodes.
 ;; 6. The root node is black.
 
-(define-module (nashkel meta-tree)
-  #:use-modules (nashkel meta-tree)
-  #:use-modules ((rnrs) #:select (define-record-type))
-  #:use-modules (ice-9 match)
-  #:use-modules (srfi srfi-26)
+(define-module (nashkel rb-tree)
+  #:use-module (nashkel meta-tree)
+  #:use-module ((rnrs) #:select (define-record-type))
+  #:use-module (ice-9 match)
+  #:use-module (srfi srfi-26)
   #:export (rb-tree?
             new-rb-tree
             rb-tree-search
@@ -86,9 +86,10 @@
   (make-rb-tree #f '(#f #f) key val RED))
 
 (define-syntax-rule (rb-node-copy! from to)
-  (rb-tree-key-set! to (rb-tree-key from))
-  (rb-tree-val-set! to (rb-tree-val from))
-  (rb-tree-color-set! to (rb-tree-color from)))
+  (begin
+    (rb-tree-key-set! to (rb-tree-key from))
+    (rb-tree-val-set! to (rb-tree-val from))
+    (rb-tree-color-set! to (rb-tree-color from))))
 
 ;; left rotate for adding larger node then try to be balanced
 ;;       [5,red]*                                [7,red]*
@@ -106,7 +107,7 @@
 ;;         / \                 / \
 ;;        ly ry               lx  ly
 ;; NOTE: left rotate only cut left child, so it's ly was cut. 
-(define-syntax-rule (%rotate-left! head x)
+(define (%rotate-left! head x)
   (tree-right-set! x (tree-left y)) ; x.right = y.left
   (when (non-leaf? (tree-left y)) ; if y.left is not leaf
     (tree-parent-set! (tree-left y) x)) ; y.left.p = x
@@ -135,7 +136,7 @@
 ;;     / \                         / \
 ;;    ly ry                       lx  lx
 ;; NOTE: right rotate only cut right child, so ry was cut.
-(define-syntax-rule (%rotate-right! head x)
+(define (%rotate-right! head x)
   (tree-left-set! x (tree-right y)) ; x.left = y.right
   (when (non-leaf? (tree-right y)) ; if y.right is not leaf
     (tree-parent-set! (tree-right y) x)) ; y.right.p = x
@@ -148,8 +149,8 @@
   (tree-right-set! y x) ; y.right = x 
   (tree-parent-set! x y)) ; x.p = y
 
-(define rbt-next< tree-left)
-(define rbt-next> tree-right)
+(define (rbt-next< t) (tree-left t))
+(define (rbt-next> t) (tree-right t))
 
 ;; NOTE: PRED follow the convention "is new key larger/less than current key?"
 (define (rbt-make-PRED tree =? >? <? new-key)
@@ -237,7 +238,7 @@
     (set! x (tree-right z)) ; x = z.right
     (%transplant! head z (tree-right z))) ; RB-TRANSPLANT (T, z, z.right)
    ((leaf? (tree-right z)) ; else if z.right is leaf
-    (set! x *tree-left z) ; x = z.left
+    (set! x (tree-left z)) ; x = z.left
     (%transplant! head z (tree-left z))) ; RB-TRANSPLANT (T, z, z.left)
    (else
     (set! y (tree-minimum (tree-right z))) ; TREE-MINIMUM (z.right)
@@ -256,24 +257,6 @@
     (rb-tree-color-set! y (rb-tree-color z)))) ; y.color = z.color
   (and (black? y-original-color) ; if y-original-color == BLACK
        (%delete-fixup head x))) ; RB-DELETE-FIXUP (T, x)
-     
-  (let* ((y (if (or (not (tree-left z)) (not (tree-right z)))
-                z
-                (rb-tree-successor z)))
-         (x (or (tree-left y) (tree-right y))))
-    (when x
-      (tree-parent-set! x (tree-parent y)))
-    (cond
-     ((root? y) (tree-root-set! head (tree-parent y)))
-     ((is-left-child? y)
-      (tree-left-set! (tree-parent y) x))
-     (else
-      (tree-right-set! (tree-parent y) x)))
-    (when (not (eq? y z))
-      (rb-node-copy! y z))
-    (when (and (black? y) (non-leaf? x))
-      (%delete-fixup head x))
-    y))
 
 (define* (rb-tree-remove! head key #:key (PRED rbt-default-PRED)
                           (next< rbt-next<) (next> rbt-next>)
@@ -354,7 +337,8 @@
      (else
       ;; normal insertion.
       (%add-node! head key val PRED))))
-  (meta-tree-BST-find! rbt key rb-tree? adder! next< next> PRED err)
+  (define-syntax-rule (overwrite! t v) (and overwrite? (rb-tree-val-set! t v)))
+  (meta-tree-BST-add! rbt key rb-tree? adder! next< next> PRED overwrite! err)
   (count+1! head)
   #t)
 
