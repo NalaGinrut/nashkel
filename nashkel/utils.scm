@@ -22,7 +22,7 @@
   #:export (list-swap!
             vector-swap!
             make-counter
-            nashkel-default-error 
+            nashkel-default-error
             ->list
             %q-remove-with-key!))
 
@@ -54,10 +54,10 @@
 (define (->list n) (and n (if (record? n) (record->list n) n)))
 
 (define* (record->list record #:optional (alist #f))
-  (define (record-ref rtd k)
+  (define (rtd-ref rtd k)
     ((record-accessor rtd k) record))
   (define (gen-val rtd k i)
-    (let ((v (record-ref rtd i)))
+    (let ((v (rtd-ref rtd i)))
       (if alist
           (cons k v)
           v)))
