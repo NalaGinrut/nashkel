@@ -35,7 +35,8 @@
 ;; 5. Every path from the root to a leaf contains the same number of black nodes.
 ;; 6. The root node is black.
 
-(define-module (nashkel rb-tree)
+(define-module (nashkel rbtree)
+  #:use-module (nashkel utils)
   #:use-module (nashkel meta-tree)
   #:use-module ((rnrs) #:select (define-record-type))
   #:use-module (ice-9 match)
@@ -51,7 +52,10 @@
             rb-tree-select))
 
 (define-record-type rb-tree (parent tree-node)
-  (fields key val (mutable color)))
+  (fields 
+   (mutable key)
+   (mutable val)
+   (mutable color)))
 
 ;; NOTE: Which type could be used for color?
 ;;       Symbol stored here is a address actually, which means it costs a 32/64
@@ -108,6 +112,7 @@
 ;;        ly ry               lx  ly
 ;; NOTE: left rotate only cut left child, so it's ly was cut. 
 (define (%rotate-left! head x)
+  (define y (tree-right x))
   (tree-right-set! x (tree-left y)) ; x.right = y.left
   (when (non-leaf? (tree-left y)) ; if y.left is not leaf
     (tree-parent-set! (tree-left y) x)) ; y.left.p = x
@@ -137,6 +142,7 @@
 ;;    ly ry                       lx  lx
 ;; NOTE: right rotate only cut right child, so ry was cut.
 (define (%rotate-right! head x)
+  (define y (tree-left x))
   (tree-left-set! x (tree-right y)) ; x.left = y.right
   (when (non-leaf? (tree-right y)) ; if y.right is not leaf
     (tree-parent-set! (tree-right y) x)) ; y.right.p = x
@@ -198,7 +204,7 @@
       (black! (next1 w))
       (red! w)
       (%rotate-right! head w)
-      (set! w (next (tree-parent x))))
+      (set! w (next1 (tree-parent x))))
      (else #f)) ; FIXME: what's the proper return value here?
     (rb-tree-color-set! w (rb-tree-color (tree-parent x)))
     (black! (tree-parent x))
@@ -213,9 +219,9 @@
      (else 
       (cond
        ((is-left-child? x)
-        (%delete-fixup-rec tree x tree-left tree-right))
+        (%delete-fixup-rec head x tree-left tree-right))
        (else 
-        (%delete-fixup-rec tree x tree-right tree-left)))
+        (%delete-fixup-rec head x tree-right tree-left)))
       (lp (tree-root head))))))
 
 (define (%transplant! head u v)
@@ -305,52 +311,46 @@
 (define (%add-node! head key val PRED)
   (define new (new-rb-tree-node key val))
   ;; NOTE: new node is red in default.
-  (define (try-to-insert! nn)
-    (define-syntax-rule (do-insert! getter setter t n)
-      (if (leaf? (getter t))
-          (setter tt n)
-          (try-to-insert! (getter tt))))
-    (let ((r (PRED nn key)))
-      (cond
-       ((> r 0) (do-insert! tree-right tree-right-set! nn new)) ; larger, right shift
-       ((< r 0) (do-insert! tree-left tree-left-set! nn new)) ; lesser, left shift
-       (else
-        ;; overwrite shouldn't be here!
-        (nashkel-default-error %add-node! "Fatal: Shouldn't be here!" (->list nn) key)))))
-
-  (try-to-insert! (tree-root head))
+  (define (try-to-insert! z)
+    (define x (head-node-tree head))
+    (define y #f)
+    (while (non-leaf? x)
+      (set! y x)
+      (if (< (PRED x (rb-tree-key z)) 0)
+          (set! x (tree-left x))
+          (set! x (tree-right x))))
+    (tree-parent-set! z y)
+    (cond
+     ((leaf? y) (head-node-tree-set! head z))
+     ((< (PRED y (rb-tree-key z)) 0)
+      (tree-left-set! y z))
+     (else (tree-right-set! y z))))
+  (try-to-insert! new)
   (%insert-fixup! head new))
 
 (define* (rb-tree-add! head key val #:key (PRED rbt-default-PRED)
-                       (next< rbt-next<) (next> rbt-next>)
                        (overwrite? #t) (err nashkel-default-error))
   (define rbt (head-node-tree head))
-  (define (adder! node)
-    (cond
-     ((rb-root? node) ; empty tree, add to root.
-      ; (black! node) ; root is black in default.
-      (rb-tree-val-set! node val)
-      (rb-tree-key-set! node key))
-     ((zero? (PRED entry key))
-      ;; key already exists. 
-      (and overwrite? (rb-tree-val-set! node val) '*dumplicated-val*))
-     (else
-      ;; normal insertion.
-      (%add-node! head key val PRED))))
-  (define-syntax-rule (overwrite! t v) (and overwrite? (rb-tree-val-set! t v)))
-  (meta-tree-BST-add! rbt key rb-tree? adder! next< next> PRED overwrite! err)
-  (count+1! head)
-  #t)
+  ;; FIXME: add to where the finder stop
+  (define (adder! t) (%add-node! head key val PRED))
+  (define (overwrite! t) (and overwrite? (rb-tree-val-set! t val)))
+  (cond
+   ((tree-empty? head) ; empty tree, add to root.
+    ;; (black! node) ; root is black in default.
+    (rb-tree-val-set! rbt val)
+    (rb-tree-key-set! rbt key))
+   (else (meta-tree-BST-add! rbt key rb-tree? adder! PRED overwrite! err)))
+  (count+1! head))
 
-(define rb-tree-minimum rb-tree-floor)
 (define* (rb-tree-floor head #:key (err nashkel-default-error))
   (let ((rbt (head-node-tree head)))
     (meta-tree-BST-floor rbt rb-tree? err)))
+(define rb-tree-minimum rb-tree-floor)
 
-(define rb-tree-maximum rb-tree-ceiling)
 (define* (rb-tree-ceiling head #:key (err nashkel-default-error))
   (let ((rbt (head-node-tree head)))
     (meta-tree-BST-ceiling rbt rb-tree? err)))
+(define rb-tree-maximum rb-tree-ceiling)
 
 (define* (rb-tree-select head n #:key (err nashkel-default-error))
   (let ((rbt (head-node-tree head)))
