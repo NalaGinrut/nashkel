@@ -49,7 +49,8 @@
             rb-tree-add!
             rb-tree-minimum rb-tree-floor
             rb-tree-maximum rb-tree-ceiling
-            rb-tree-select))
+            rb-tree-select
+            rb-tree->dot))
 
 (define-record-type rb-tree (parent tree-node)
   (fields 
@@ -317,7 +318,7 @@
   (if (< (PRED y (rb-tree-key z)) 0)
       (tree-left-set! y z)
       (tree-right-set! y z))
-  (%insert-fixup! head z))
+  (if (%insert-fixup! head z) '*success* '*failed*))
 
 (define* (rb-tree-add! head key val #:key (PRED rbt-default-PRED)
                        (overwrite? #t) (err nashkel-default-error))
@@ -329,9 +330,14 @@
    ((tree-empty? head) ; empty tree, add to root.
     ;; (black! node) ; root is black in default.
     (rb-tree-val-set! rbt val)
-    (rb-tree-key-set! rbt key))
-   (else (meta-tree-BST-add! rbt key rb-tree? adder! PRED overwrite! err)))
-  (count+1! head))
+    (rb-tree-key-set! rbt key)
+    (count+1! head))
+   (else
+    (let ((status (meta-tree-BST-add! rbt key rb-tree? adder! PRED overwrite! err)))
+      (match status
+       ((or '*overwrited* '*occupied* '*failed*) status)
+       ('*success* (count+1! head))
+       (else (error rb-tree-add! "Something wrong!" status)))))))
 
 (define* (rb-tree-floor head #:key (err nashkel-default-error))
   (let ((rbt (head-node-tree head)))
@@ -346,3 +352,28 @@
 (define* (rb-tree-select head n #:key (err nashkel-default-error))
   (let ((rbt (head-node-tree head)))
     (meta-tree-BST-select rbt n err)))
+
+(define* (rb-tree->dot rb #:optional (port #f))
+  (define (print-node-color node port)
+    (if (black? node)
+        (format port "    ~a [style = filled, fillcolor = \"#cccccc\"];\n" (rb-tree-key node))
+        (format port "    ~a [style = filled, color = \"#336666\", fillcolor = \"#CC9999\"];\n" (rb-tree-key node))))
+  (let ((port (or port (current-output-port))))
+    (format port "digraph rbtrees {\n")
+    (node-fold '()
+               (lambda (accum node)
+                 (let ((left (tree-left node))
+                       (right (tree-right node)))
+                   (print-node-color node port)
+                   (cond
+                    ((leaf? left) #f) ; skip
+                    (else
+                     (print-node-color left port)
+                     (format port "    ~a -> ~a;\n" (rb-tree-key node) (rb-tree-key left))))
+                   (cond
+                    ((leaf? right) #f) ; skip
+                    (else
+                     (print-node-color right port)
+                     (format port "    ~a -> ~a;\n" (rb-tree-key node) (rb-tree-key right))))))
+               (tree-root rb))
+     (display "}\n" port)))
