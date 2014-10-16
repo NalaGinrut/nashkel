@@ -64,21 +64,22 @@
 ;;       add one byte in three address size: parent, left, right in Cee language
 ;;       struct. Of course, the size of these types are depened on VM
 ;;       implementation, but use boolean is a nice choice.
-(define BLACK #f)
-(define RED #t)
-(define-syntax-rule (red? c) c)
-(define-syntax-rule (red! node)
-  (rb-tree-color-set! node RED))
-(define-syntax-rule (black? c) (not c))
-(define-syntax-rule (black! node)
-  (rb-tree-color-set! node BLACK))
-(define-syntax-rule (!color color) (not color))
+(define (red? node) (and (non-leaf? node) (eq? (rb-tree-color node) 'red)))
+(define (red! node) (rb-tree-color-set! node 'red))
+(define (black? node) (or (leaf? node) (eq? (rb-tree-color node) 'black)))
+(define (black! node) (rb-tree-color-set! node 'black))
+(define (!color node)
+  (rb-tree-color-set! node
+                      (if (eq? (rb-tree-color node) 'black)
+                          'red
+                          'black)))
 
+;; root node is black
 (define (make-rb-tree-root)
-  (make-rb-tree #f '(#f #f) #f #f BLACK))
+  (make-rb-tree #f '(#f #f) #f #f 'black))
 
-(define-syntax-rule (rb-root? rbt)
-  (and (rb-tree? rbt) (eq? (black? rbt)) (not (tree-parent rbt))))
+(define (rb-root? rbt)
+  (and (rb-tree? rbt) (black? rbt) (root? rbt)))
 
 (define (new-rb-tree)
   (let* ((rbt (make-rb-tree-root))
@@ -87,13 +88,12 @@
 
 ;; NOTE: new node is red in default that could cut some steps.
 (define (new-rb-tree-node key val)
-  (make-rb-tree #f '(#f #f) key val RED))
+  (make-rb-tree #f '(#f #f) key val 'red))
 
-(define-syntax-rule (rb-node-copy! from to)
-  (begin
-    (rb-tree-key-set! to (rb-tree-key from))
-    (rb-tree-val-set! to (rb-tree-val from))
-    (rb-tree-color-set! to (rb-tree-color from))))
+(define (rb-node-copy! from to)
+  (rb-tree-key-set! to (rb-tree-key from))
+  (rb-tree-val-set! to (rb-tree-val from))
+  (rb-tree-color-set! to (rb-tree-color from)))
 
 ;; left rotate for adding larger node then try to be balanced
 ;;       [5,red]*                                [7,red]*
@@ -280,26 +280,27 @@
   (define x (fetch (tree-grand-parent new))) ; x == n.p.p.getter
   (define n new) ; set a tmp var for the later side-effect handling.
   (cond
-   ((and x (red? x)) ; if x.color == RED then
+   ((red? x) ; if x.color == RED then
     (black! (tree-parent n)) ; n.p.color = BLACK
     (black! x) ; x.color = BLACK
     (red! (tree-grand-parent n)) ; n.p.p.color = RED
     (%insert-fixup! head (tree-grand-parent n))) ; LOOP(n.p.p)
    (else
-    (when (eq? new (fetch (tree-parent n))) ; else if n == n.p.getter then
+    (when (eq? n (fetch (tree-parent n))) ; else if n == n.p.getter then
       (set! n (tree-parent n)) ; n = n.p
-      (rotate1! (tree-root head) (tree-parent n))) ; LEFT-ROTATE(T, n.p)
+      (rotate1! head (tree-parent n))) ; LEFT-ROTATE(T, n.p)
     (black! (tree-parent n)) ; n.p.color = BLACK
     (red! (tree-grand-parent n)) ; n.p.p.color = RED
     ;; RIGHT-ROTATE(T, n.p.p)
-    (rotate2! (tree-root head) (tree-grand-parent n))
+    (rotate2! head (tree-grand-parent n))
     (%insert-fixup! head n)))) ; LOOP(n)
 
 (define (%insert-fixup! head new)
   (cond
    ((and (non-root? new) (red? (tree-parent new)))
     (cond
-     ((is-left-grand-child? new) ; new node is left grand child of certain node
+     ((eq? (tree-parent new) (tree-left (tree-parent (tree-parent new))))
+      ;; new node is left grand child of certain node
       (%insert-fixup-rec! head new tree-right %rotate-left! %rotate-right!))
      (else ; new node is right grand child of certain node
       (%insert-fixup-rec! head new tree-left %rotate-right! %rotate-left!))))
@@ -307,32 +308,22 @@
   ;; fix root color
   (black! (tree-root head)))
 
-;; NOTE: node is the proper entry which was founded in meta-tree-BST-find
-(define (%add-node! head key val PRED)
-  (define new (new-rb-tree-node key val))
+;; NOTE: node is the proper entry which was founded in meta-tree-BST-add!
+;; NOTE: according to meta-tree-BST-add!, y can't be leaf in anyway!
+(define (%add-node! head y key val PRED)
   ;; NOTE: new node is red in default.
-  (define (try-to-insert! z)
-    (define x (head-node-tree head))
-    (define y #f)
-    (while (non-leaf? x)
-      (set! y x)
-      (if (< (PRED x (rb-tree-key z)) 0)
-          (set! x (tree-left x))
-          (set! x (tree-right x))))
-    (tree-parent-set! z y)
-    (cond
-     ((leaf? y) (head-node-tree-set! head z))
-     ((< (PRED y (rb-tree-key z)) 0)
-      (tree-left-set! y z))
-     (else (tree-right-set! y z))))
-  (try-to-insert! new)
-  (%insert-fixup! head new))
+  (define z (new-rb-tree-node key val))
+  (tree-parent-set! z y)
+  (if (< (PRED y (rb-tree-key z)) 0)
+      (tree-left-set! y z)
+      (tree-right-set! y z))
+  (%insert-fixup! head z))
 
 (define* (rb-tree-add! head key val #:key (PRED rbt-default-PRED)
                        (overwrite? #t) (err nashkel-default-error))
   (define rbt (head-node-tree head))
   ;; FIXME: add to where the finder stop
-  (define (adder! t) (%add-node! head key val PRED))
+  (define (adder! t) (%add-node! head t key val PRED))
   (define (overwrite! t) (and overwrite? (rb-tree-val-set! t val)))
   (cond
    ((tree-empty? head) ; empty tree, add to root.
