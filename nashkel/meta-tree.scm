@@ -73,7 +73,8 @@
             pre-order-traverse
             in-order-traverse
             post-order-traverse
-            make-bfs-walker))
+            make-bfs-walker
+            node-fold))
 
 ;; CONVENTIONs:
 ;; * leaf node is #f.
@@ -494,7 +495,7 @@
     (match (PRED tree key)
       ((? zero?) 
        ;; find it, if overwritable, it, or return #f
-       (and overwrite! (overwrite! tree) '*overwrited*))
+       (if overwrite! (begin (overwrite! tree) '*overwrited*) '*occupied*))
       ((? positive?) ; new key greater than current key, go next>
        (if (non-leaf? right)
            ;; has right child, continue to go right
@@ -508,3 +509,16 @@
           ;; left is leaf, add to right side
           (adder! tree)))
       (else (err meta-tree-BST-add! "Fatal0: Shouldn't be here!" (->list tree))))))
+
+(define (node-fold init proc node)
+  (cond
+   ((leaf? node) init)
+   (else
+    (if (tree-left node)
+        (let ((accum (node-fold init proc (tree-left node))))
+          (if (tree-right node)
+              (node-fold (proc accum node) proc (tree-right node))
+              (proc accum node)))
+        (if (tree-right node)
+            (node-fold (proc init node) proc (tree-right node))
+            (proc init node))))))
