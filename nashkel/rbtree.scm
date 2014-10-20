@@ -91,10 +91,10 @@
 (define (new-rb-tree-node key val)
   (make-rb-tree #f '(#f #f) key val 'red))
 
+;; don't copy the color
 (define (rb-node-copy! from to)
   (rb-tree-key-set! to (rb-tree-key from))
-  (rb-tree-val-set! to (rb-tree-val from))
-  (rb-tree-color-set! to (rb-tree-color from)))
+  (rb-tree-val-set! to (rb-tree-val from)))
 
 ;; left rotate for adding larger node then try to be balanced
 ;;       [5,red]*                                [7,red]*
@@ -190,41 +190,55 @@
 
 ;; NOTE: we have to fetch parent each time rather than store it for all.
 ;;       There're so many side-effects here!
-(define (%delete-fixup-rec head x next1 next2)
+(define (%delete-fixup-rec head x next1 next2 rotate1 rotate2)
   (let ((w (next2 (tree-parent x))))
-    (when (red? w)
-      (black! w)
-      (red! (tree-parent w))
-      (%rotate-left! head (tree-parent x))
-      (set! w (next2 (tree-parent x))))
+    (when (red? w) ; if w.color == RED
+      (display "fr 0\n")
+      (black! w) ; w.color = BLACK
+      (red! (tree-parent w)) ; w.p.color = RED
+      (rotate1 head (tree-parent x)) ; ROTATE1(T, x.p)
+      (set! w (next2 (tree-parent x)))) ; w = x.p.next2
     (cond
+     ;; if w.next1.color == BLACK and w.next2.color == BLACK
      ((and (black? (next1 w)) (black? (next2 w)))
-      (red! w)
-      (set! x (tree-parent x)))
-     ((black? (next2 w))
-      (black! (next1 w))
-      (red! w)
-      (%rotate-right! head w)
-      (set! w (next1 (tree-parent x))))
-     (else #f)) ; FIXME: what's the proper return value here?
-    (rb-tree-color-set! w (rb-tree-color (tree-parent x)))
-    (black! (tree-parent x))
-    (black! (next2 w))
-    (%rotate-left! head (tree-parent x))))
+      (display "fr 1\n")
+      (red! w) ; w.color = RED
+      (set! x (tree-parent x))) ; x = x.p
+     (else
+      (when (black? (next2 w)) ; elseif w.next2.color == BLACK
+        (display "fr 2\n")    
+        (black! (next1 w)) ; w.next1.color = BLACK
+        (red! w) ; w.color = RED
+        (rotate2 head w) ; ROTATE2(T, w)
+        (format #t "x: ~a~%" (->list x))
+        (set! w (next2 (tree-parent x)))) ; w = x.p.next2
+      (display "fr 4\n")
+      (format #t "w: ~a~% x: ~a~%" (->list w) (->list x))
+      (rb-tree-color-set! w (rb-tree-color (tree-parent x))) ; w.color = x.p.color
+      (display "a\n")
+      (black! (tree-parent x)) ; x.p.color = BLACK
+      (display "b\n")
+      (black! (next2 w)) ; w.next2.color = BLACK
+      (display "c\n")
+      (rotate1 head (tree-parent x)))))) ; ROTATE1(T, x.p)
 
 (define (%delete-fixup head x)
   (format #t "fix node: ~a:~a~%" x (->list x))
   (let lp((x x))
     (cond
-     ((or (eq? x (tree-root head)) (red? x))
-      (black! x))
+     ;; if x is T.root or x.color == RED then:
+     ((or (root? x) (red? x))
+      (display "f0\n")
+      (black! x)) ; x.color = BLACK, and END LOOP
      (else 
       (cond
        ((is-left-child? x)
-        (%delete-fixup-rec head x tree-left tree-right))
+        (display "f1\n")
+        (%delete-fixup-rec head x tree-left tree-right %rotate-left! %rotate-right!))
        (else
-        (%delete-fixup-rec head x tree-right tree-left)))
-      (lp (tree-root head))))))
+        (display "f2\n")
+        (%delete-fixup-rec head x tree-right tree-left %rotate-right! %rotate-left!)))
+      (lp (tree-root head)))))) ; x = T.root then LOOP
 
 ;; replace u with v in the subtree
 (define (%transplant! head u v)
@@ -247,10 +261,10 @@
 ;; We use the optimized algorithm here.
 ;; Borrowed from Higepon(Taro Minowa) <higepon@users.sourceforge.jp>
 (define (%remove-node! head z)
-  (let* ((y (if (or (not (tree-left z)) (not (tree-right z)))
+  (let* ((y (if (or (leaf? (tree-left z)) (leaf? (tree-right z)))
                 z
-                (rb-tree-successor z)))
-         (x (if (tree-left y) (tree-left y) (tree-right y))))
+                (rb-tree-successor z))) ; since z.right is non-leaf, it's actually tree-minimum
+         (x (if (non-leaf? (tree-left y)) (tree-left y) (tree-right y))))
     (%transplant! head y x)
     (when (not (eq? y z))
       ;; NOTE: Optimized! we're not going to tweak the deleted node,
@@ -258,11 +272,9 @@
       (rb-node-copy! y z))
     (and (black? y)
          (non-leaf? x)
-         (%delete-fixup head x))
-    y))
+         (%delete-fixup head x))))
 
-;; FIXME: something wrong with deletion! Sometimes there's only one child inside a tree,
-;;        I don't think it's normal!
+;; FIXME: something wrong when delete 10 in 1,3,10,5
 (define* (rb-tree-remove! head key #:key (PRED rbt-default-PRED)
                           (next< rbt-next<) (next> rbt-next>)
                           (err nashkel-default-error))
