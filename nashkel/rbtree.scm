@@ -213,6 +213,7 @@
     (%rotate-left! head (tree-parent x))))
 
 (define (%delete-fixup head x)
+  (format #t "fix node: ~a:~a~%" x (->list x))
   (let lp((x x))
     (cond
      ((or (eq? x (tree-root head)) (red? x))
@@ -221,58 +222,54 @@
       (cond
        ((is-left-child? x)
         (%delete-fixup-rec head x tree-left tree-right))
-       (else 
+       (else
         (%delete-fixup-rec head x tree-right tree-left)))
       (lp (tree-root head))))))
 
+;; replace u with v in the subtree
 (define (%transplant! head u v)
   (cond
    ((root? u) ; if u is root
+    (display "t0\n")
     (tree-root-set! head v)) ; T.root = v
    ((is-left-child? u) ; else if u == u.p.left
+    (display "t1\n")
+    (format #t "u: ~a~%" (->list u))
     (tree-left-set! (tree-parent u) v)) ; u.p.left = v
-   (else (tree-right-set! (tree-parent u) v))) ; u.p.right = v 
-  (tree-parent-set! v (tree-parent u))) ; v.p = u.p
-
-(define (%remove-node! head z)
-  (define (tree-minimum t)
-    (meta-tree-BST-floor t rb-tree? nashkel-default-error))
-  (define x)
-  (define y z) ; y = z
-  (define y-original-color (rb-tree-color z)) ; y-original-color = y.color
-  (cond
-   ((leaf? (tree-left z)) ; if z.left is leaf
-    (set! x (tree-right z)) ; x = z.right
-    (%transplant! head z (tree-right z))) ; RB-TRANSPLANT (T, z, z.right)
-   ((leaf? (tree-right z)) ; else if z.right is leaf
-    (set! x (tree-left z)) ; x = z.left
-    (%transplant! head z (tree-left z))) ; RB-TRANSPLANT (T, z, z.left)
    (else
-    (set! y (tree-minimum (tree-right z))) ; TREE-MINIMUM (z.right)
-    (set! y-original-color (rb-tree-color y)) ; y-original-color = y.color
-    (set! x (tree-right y)) ; x = y.right
-    (cond
-     ((eq? (tree-parent y) z) ; if y.p == z
-      (tree-parent-set! x y)) ; x.p = y
-     (else
-      (%transplant! head y (tree-right y)) ; RB-TRANSPLANT (T, y, y.right)
-      (tree-right-set! y (tree-right z)) ; y.right = z.right
-      (tree-parent-set! (tree-right y) y))) ; y.right.p = y
-    (%transplant! head z y) ; RB-TRANSPLANT (T, z, y)
-    (tree-left-set! y (tree-left z)) ; y.left = z.left
-    (tree-parent-set! (tree-left y) y) ; y.left.p = y
-    (rb-tree-color-set! y (rb-tree-color z)))) ; y.color = z.color
-  (and (black? y-original-color) ; if y-original-color == BLACK
-       (%delete-fixup head x))) ; RB-DELETE-FIXUP (T, x)
+    (display "t2\n")
+    (format #t "u: ~a~%" (->list u))
+    (tree-right-set! (tree-parent u) v))) ; u.p.right = v
+  (display "t3\n")
+  (and (non-leaf? v) (tree-parent-set! v (tree-parent u)))
+  (display "t4\n")) ; v.p = u.p
 
+;; We use the optimized algorithm here.
+;; Borrowed from Higepon(Taro Minowa) <higepon@users.sourceforge.jp>
+(define (%remove-node! head z)
+  (let* ((y (if (or (not (tree-left z)) (not (tree-right z)))
+                z
+                (rb-tree-successor z)))
+         (x (if (tree-left y) (tree-left y) (tree-right y))))
+    (%transplant! head y x)
+    (when (not (eq? y z))
+      ;; NOTE: Optimized! we're not going to tweak the deleted node,
+      ;;       just overwrite it!
+      (rb-node-copy! y z))
+    (and (black? y)
+         (non-leaf? x)
+         (%delete-fixup head x))
+    y))
+
+;; FIXME: something wrong with deletion! Sometimes there's only one child inside a tree,
+;;        I don't think it's normal!
 (define* (rb-tree-remove! head key #:key (PRED rbt-default-PRED)
                           (next< rbt-next<) (next> rbt-next>)
                           (err nashkel-default-error))
   (define rbt (head-node-tree head))
   (define (remove! node) (%remove-node! head node))
-  (meta-tree-BST-find rbt key rb-tree? remove! next< next> PRED err)
-  (count-1! head)
-  #t)
+  (and (meta-tree-BST-find rbt key rb-tree? remove! next< next> PRED err)
+       (count-1! head)))
 
 ;; NOTE: getter will be tree-left or tree-right
 ;; NOTE: This is a high-order-function abstracted from RB-INSERT-FIXUP
