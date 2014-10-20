@@ -168,8 +168,8 @@
 (define (non-leaf? node) node)
 
 ;; root pred
-(define-syntax-rule (root? node) (not (tree-node-parent node)))
-(define-syntax-rule (non-root? node) (not (root? node)))
+(define-syntax-rule (root? node) (not (tree-parent node)))
+(define-syntax-rule (non-root? node) node)
 (define tree-root head-node-tree)
 (define tree-root-set! head-node-tree-set!)
 
@@ -399,7 +399,7 @@
 ;;      ... [ Y ]          [ X ] ...    --->     ==> ...  [ P ]<==     
 ;;           / \            / \                            / \  
 ;;     ==>[ Z ] ...       ... ...                      [ X ] ...
-(define (mdta-tree-BST-successor tree valid? err)
+(define (meta-tree-BST-successor tree valid? err)
   ;; NOTE: Although root is defined as #f here, please don't rely on
   ;;       it! Use 'false-to-find?' to return #f if no sucessor.
   (define-syntax-rule (false-to-find? x) (or x))
@@ -410,19 +410,17 @@
     ;; get min in right subtree
     (meta-tree-BST-floor (tree-right tree) valid? err))
    (else
-    (let ((parent (tree-parent tree)))
-      (let lp((t tree) (p parent))
-        (cond
-         ((and (valid? p) ; not root and valid
-               (is-left-child? t)) ; t is a left child
-          ;; trace the upper level
-          (lp p (tree-parent p)))
-         (else
-          ;; NOTE: What about p is root node?!
-          ;;       There's only one situation p can be root, that is tree is
-          ;;       the largest node. Usually, we return #f for this. 
-          ;; Case (2):
-          (false-to-find? p))))))))
+    (let lp((t tree))
+      (cond
+       ((and (non-root? t) (is-left-child? t)) ; t is left child
+        ;; trace the upper level
+        (lp (tree-parent t)))
+       (else
+        ;; NOTE: What about p is root node?!
+        ;;       There's only one situation p can be root, that is tree is
+        ;;       the largest node. Usually, we return #f for this. 
+        ;; Case (2):
+        (false-to-find? (tree-parent t))))))))
 
 ;; Predecessor is the largest item in t that is strictly smaller than X.
 ;;
