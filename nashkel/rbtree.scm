@@ -192,15 +192,15 @@
 ;;       There're so many side-effects here!
 (define (%delete-fixup-rec head x next1 next2 rotate1 rotate2)
   (let ((w (next2 (tree-parent x))))
-    (when (red? w) ; if w.color == RED
+    (cond
+     ((red? w) ; if w.color == RED
       (display "fr 0\n")
       (black! w) ; w.color = BLACK
       (red! (tree-parent w)) ; w.p.color = RED
       (rotate1 head (tree-parent x)) ; ROTATE1(T, x.p)
       (set! w (next2 (tree-parent x)))) ; w = x.p.next2
-    (cond
-     ;; if w.next1.color == BLACK and w.next2.color == BLACK
      ((and (black? (next1 w)) (black? (next2 w)))
+      ;; if w.next1.color == BLACK and w.next2.color == BLACK
       (display "fr 1\n")
       (red! w) ; w.color = RED
       (set! x (tree-parent x))) ; x = x.p
