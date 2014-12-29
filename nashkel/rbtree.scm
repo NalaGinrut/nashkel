@@ -45,6 +45,7 @@
             new-rb-tree
             rb-tree-search
             rb-tree-successor
+            rb-make-PRED
             rb-tree-remove!
             rb-tree-add!
             rb-tree-minimum rb-tree-floor
@@ -230,7 +231,7 @@
      ((or (root? x) (red? x))
       (display "f0\n")
       (black! x)) ; x.color = BLACK, and END LOOP
-     (else 
+     (else
       (cond
        ((is-left-child? x)
         (display "f1\n")
@@ -274,7 +275,6 @@
          (non-leaf? x)
          (%delete-fixup head x))))
 
-;; FIXME: something wrong when delete 10 in 1,3,10,5
 (define* (rb-tree-remove! head key #:key (PRED rbt-default-PRED)
                           (next< rbt-next<) (next> rbt-next>)
                           (err nashkel-default-error))
