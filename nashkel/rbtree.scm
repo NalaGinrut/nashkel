@@ -195,32 +195,32 @@
   (let ((w (next2 (tree-parent x))))
     (cond
      ((red? w) ; if w.color == RED
-      (display "fr 0\n")
+      ;;(display "fr 0\n")
       (black! w) ; w.color = BLACK
       (red! (tree-parent w)) ; w.p.color = RED
       (rotate1 head (tree-parent x)) ; ROTATE1(T, x.p)
       (set! w (next2 (tree-parent x)))) ; w = x.p.next2
      ((and (black? (next1 w)) (black? (next2 w)))
       ;; if w.next1.color == BLACK and w.next2.color == BLACK
-      (display "fr 1\n")
+      ;;(display "fr 1\n")
       (red! w) ; w.color = RED
       (set! x (tree-parent x))) ; x = x.p
      (else
       (when (black? (next2 w)) ; elseif w.next2.color == BLACK
-        (display "fr 2\n")    
+        ;;(display "fr 2\n")    
         (black! (next1 w)) ; w.next1.color = BLACK
         (red! w) ; w.color = RED
         (rotate2 head w) ; ROTATE2(T, w)
-        (format #t "x: ~a~%" (->list x))
+        ;;(format #t "x: ~a~%" (->list x))
         (set! w (next2 (tree-parent x)))) ; w = x.p.next2
-      (display "fr 4\n")
-      (format #t "w: ~a~% x: ~a~%" (->list w) (->list x))
+      ;;(display "fr 4\n")
+      ;;(format #t "w: ~a~% x: ~a~%" (->list w) (->list x))
       (rb-tree-color-set! w (rb-tree-color (tree-parent x))) ; w.color = x.p.color
-      (display "a\n")
+      ;;(display "a\n")
       (black! (tree-parent x)) ; x.p.color = BLACK
-      (display "b\n")
+      ;;(display "b\n")
       (black! (next2 w)) ; w.next2.color = BLACK
-      (display "c\n")
+      ;;(display "c\n")
       (rotate1 head (tree-parent x)))))) ; ROTATE1(T, x.p)
 
 (define (%delete-fixup head x)
@@ -229,15 +229,15 @@
     (cond
      ;; if x is T.root or x.color == RED then:
      ((or (root? x) (red? x))
-      (display "f0\n")
+      ;;(display "f0\n")
       (black! x)) ; x.color = BLACK, and END LOOP
      (else
       (cond
        ((is-left-child? x)
-        (display "f1\n")
+        ;;(display "f1\n")
         (%delete-fixup-rec head x tree-left tree-right %rotate-left! %rotate-right!))
        (else
-        (display "f2\n")
+        ;;(display "f2\n")
         (%delete-fixup-rec head x tree-right tree-left %rotate-right! %rotate-left!)))
       (lp (tree-root head)))))) ; x = T.root then LOOP
 
@@ -245,19 +245,18 @@
 (define (%transplant! head u v)
   (cond
    ((root? u) ; if u is root
-    (display "t0\n")
+    ;;(display "t0\n")
     (tree-root-set! head v)) ; T.root = v
    ((is-left-child? u) ; else if u == u.p.left
-    (display "t1\n")
-    (format #t "u: ~a~%" (->list u))
+    ;;(display "t1\n")
+    ;;(format #t "u: ~a~%" (->list u))
     (tree-left-set! (tree-parent u) v)) ; u.p.left = v
    (else
-    (display "t2\n")
-    (format #t "u: ~a~%" (->list u))
+    ;;(display "t2\n")
+    ;;(format #t "u: ~a~%" (->list u))
     (tree-right-set! (tree-parent u) v))) ; u.p.right = v
-  (display "t3\n")
-  (and (non-leaf? v) (tree-parent-set! v (tree-parent u)))
-  (display "t4\n")) ; v.p = u.p
+  ;;(display "t3\n")
+  (and (non-leaf? v) (tree-parent-set! v (tree-parent u)))) ; v.p = u.p
 
 ;; We use the optimized algorithm here.
 ;; Borrowed from Higepon(Taro Minowa) <higepon@users.sourceforge.jp>
